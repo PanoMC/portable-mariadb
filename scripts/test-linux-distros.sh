@@ -20,8 +20,12 @@ if [ $# -eq 0 ]; then
         linux-riscv64) set -- ubuntu:24.04 debian:13-slim ;;
         linux-x86) set -- i386/debian:11-slim i386/debian:13-slim ;;
         linux-musl-x86) set -- i386/alpine:3.18 i386/alpine:latest ;;
-        *) set -- debian:10-slim ubuntu:20.04 ubuntu:24.04 debian:13-slim rockylinux:8 \
+        linux-x64) set -- debian:10-slim ubuntu:20.04 ubuntu:24.04 debian:13-slim rockylinux:8 \
                   fedora:latest archlinux:latest opensuse/leap:15 ;;
+        # archlinux has no arm64 image.
+        linux-arm64) set -- debian:10-slim ubuntu:20.04 ubuntu:24.04 debian:13-slim rockylinux:8 \
+                  fedora:latest opensuse/leap:15 ;;
+        *) set -- debian:12-slim ubuntu:24.04 ;;
     esac
 fi
 
