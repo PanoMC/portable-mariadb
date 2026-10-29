@@ -158,7 +158,14 @@ esac
 if command -v ninja >/dev/null 2>&1; then set -- -G Ninja "$@"; fi
 
 cmake -S "$SRC" -B "$BUILD" "$@"
-cmake --build "$BUILD" --parallel "$JOBS"
+# The full log is huge (thousands of warnings), so on failure only the errors and the tail are shown.
+if ! cmake --build "$BUILD" --parallel "$JOBS" > "$WORK/build.log" 2>&1; then
+    grep -nE '(^| )(error|fatal error)( |:)|^FAILED:|Error [0-9]+|undefined reference|ld: ' "$WORK/build.log" | head -60
+    echo "---- last lines of $WORK/build.log"
+    tail -40 "$WORK/build.log"
+    exit 1
+fi
+grep -c 'warning:' "$WORK/build.log" | sed 's/^/compiler warnings: /'
 DESTDIR="$STAGE" cmake --install "$BUILD" >/dev/null
 
 # Assemble the package from an allowlist of the install tree.

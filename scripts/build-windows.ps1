@@ -54,7 +54,7 @@ $CmakeArgs = @(
     '-DCMAKE_POLICY_VERSION_MINIMUM=3.5',
     '-DWITH_SSL=bundled', '-DWITH_ZLIB=bundled', '-DWITH_PCRE=bundled', '-DWITH_LIBFMT=bundled',
     '-DWITH_WSREP=OFF', '-DWITH_EMBEDDED_SERVER=OFF', '-DWITH_UNIT_TESTS=OFF', '-DCONC_WITH_UNIT_TESTS=OFF',
-    '-DWITH_MARIABACKUP=OFF', '-DMSVC_CRT_TYPE=/MT',
+    '-DWITH_MARIABACKUP=OFF', '-DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded',
     '-DPLUGIN_ROCKSDB=NO', '-DPLUGIN_DUCKDB=NO', '-DPLUGIN_MROONGA=NO', '-DPLUGIN_SPIDER=NO', '-DPLUGIN_CONNECT=NO',
     '-DPLUGIN_COLUMNSTORE=NO', '-DPLUGIN_S3=NO', '-DPLUGIN_OQGRAPH=NO', '-DPLUGIN_SPHINX=NO',
     '-DPLUGIN_AUTH_GSSAPI=NO', '-DPLUGIN_AUTH_GSSAPI_CLIENT=OFF', '-DPLUGIN_HASHICORP_KEY_MANAGEMENT=NO',
@@ -65,8 +65,14 @@ $CmakeArgs = @(
 )
 cmake @CmakeArgs
 if ($LASTEXITCODE -ne 0) { throw 'cmake configure failed' }
-cmake --build $Build --config RelWithDebInfo --parallel
-if ($LASTEXITCODE -ne 0) { throw 'build failed' }
+# The full log is huge, so on failure only the errors and the tail are shown.
+cmake --build $Build --config RelWithDebInfo --parallel *> "$Work/build.log"
+if ($LASTEXITCODE -ne 0) {
+    Select-String -Path "$Work/build.log" -Pattern ': (fatal )?error [A-Z]+[0-9]+|error MSB|FAILED' | Select-Object -First 60 | ForEach-Object { $_.Line }
+    Write-Host "---- last lines of $Work/build.log"
+    Get-Content "$Work/build.log" -Tail 40
+    throw 'build failed'
+}
 cmake --install $Build --config RelWithDebInfo --prefix $Stage | Out-Null
 if ($LASTEXITCODE -ne 0) { throw 'install failed' }
 
