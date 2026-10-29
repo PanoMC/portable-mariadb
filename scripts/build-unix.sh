@@ -52,6 +52,12 @@ mkdir -p "$SRC" "$BUILD" "$STAGE" "$DIST" "$WORK/openssl-src"
 tar -xzf "$TARBALL" -C "$SRC" --strip-components=1
 tar -xzf "$OPENSSL_TARBALL" -C "$WORK/openssl-src" --strip-components=1
 
+# fmt 12 (bundled by MariaDB) does not compile on 32-bit x86 (no operator~ on its uint128 fallback,
+# hit by the 80-bit long double path). Use the fmt 11.0.2 that MariaDB already pins for old compilers.
+case "$TARGET" in
+    *-x86) sed -i.orig 's/CMAKE_CXX_COMPILER_VERSION VERSION_LESS "4.9"/TRUE/' "$SRC/cmake/libfmt.cmake" ;;
+esac
+
 # Static OpenSSL for the server and the client connector (the bundled wolfSSL would leave the
 # connector without a TLS / hash backend on Unix).
 OPENSSL="$WORK/openssl"

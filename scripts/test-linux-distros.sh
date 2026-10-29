@@ -15,10 +15,11 @@ PLATFORM=$(target_image "$TARGET" | cut -d' ' -f2)
 
 if [ $# -eq 0 ]; then
     case "$TARGET" in
-        linux-musl-*) set -- alpine:3.18 alpine:3.20 alpine:latest ;;
+        linux-musl-x64|linux-musl-arm64|linux-musl-armv7) set -- alpine:3.18 alpine:3.20 alpine:latest ;;
         linux-armv7) set -- debian:11-slim ubuntu:22.04 debian:12-slim ;;
         linux-riscv64) set -- ubuntu:24.04 debian:13-slim ;;
-        linux-x86) set -- debian:10-slim debian:12-slim ;;
+        linux-x86) set -- i386/debian:11-slim i386/debian:13-slim ;;
+        linux-musl-x86) set -- i386/alpine:3.18 i386/alpine:latest ;;
         *) set -- debian:10-slim ubuntu:20.04 ubuntu:24.04 debian:13-slim rockylinux:8 \
                   fedora:latest archlinux:latest opensuse/leap:15 ;;
     esac
