@@ -80,8 +80,10 @@ pwsh scripts/build-windows.ps1 -Target windows-x64   # VS 2022 + choco install w
 ## New MariaDB version
 
 Set `MARIADB_VERSION` + `MARIADB_SHA256` (from `archive.mariadb.org/mariadb-<v>/source/sha256sums.txt`)
-in `versions.env`, reset `REVISION=1`, push, then tag `v<version>-r1`. A build-only change bumps
-`REVISION`.
+in `versions.env`, reset `REVISION=1` and push to `main`. A build-only change bumps `REVISION`.
+Releasing is automatic: when the version in `versions.env` has no release yet, CI creates the tag
+`v<version>-r<revision>` and the release after every build passed. Pushes that keep the version only
+build and test.
 
 ## License
 

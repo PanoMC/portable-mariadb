@@ -118,32 +118,52 @@ jobs:
           path: dist/portable-mariadb-*
           if-no-files-found: error
 
+  # Releases itself: when main has a versions.env version that has no release yet, the tag
+  # v<MARIADB_VERSION>-r<REVISION> and its release are created once every build passed.
+  # Experimental targets that failed are simply left out of the release.
   release:
-    if: startsWith(github.ref, 'refs/tags/v')
+    if: success() && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v'))
     needs: [linux, macos, windows]
     runs-on: ubuntu-24.04
     permissions:
       contents: write
     steps:
       - uses: actions/checkout@v4
-      - name: check tag
-        run: |
-          . ./versions.env
-          expected="v$MARIADB_VERSION-r$REVISION"
-          [ "$GITHUB_REF_NAME" = "$expected" ] || { echo "tag $GITHUB_REF_NAME != $expected (versions.env)"; exit 1; }
-      - uses: actions/download-artifact@v4
-        with:
-          path: dist
-          merge-multiple: true
-      # The GPL source the binaries were built from goes into the same release.
-      - run: cp "$(scripts/fetch-source.sh mariadb)" "$(scripts/fetch-source.sh openssl)" dist/
-      - run: python3 scripts/make-manifest.py "$GITHUB_REPOSITORY"
-      - name: publish
+      - name: check version
+        id: version
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           . ./versions.env
-          gh release create "$GITHUB_REF_NAME" --title "MariaDB $MARIADB_VERSION (r$REVISION)" \
+          tag="v$MARIADB_VERSION-r$REVISION"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          if [ "$GITHUB_REF_TYPE" = tag ] && [ "$GITHUB_REF_NAME" != "$tag" ]; then
+            echo "tag $GITHUB_REF_NAME != $tag (versions.env)"; exit 1
+          fi
+          if gh release view "$tag" >/dev/null 2>&1; then
+            echo "$tag is already released, nothing to do"
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "publish=true" >> "$GITHUB_OUTPUT"
+          fi
+      - if: steps.version.outputs.publish == 'true'
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      # The GPL source the binaries were built from goes into the same release.
+      - if: steps.version.outputs.publish == 'true'
+        run: cp "$(scripts/fetch-source.sh mariadb)" "$(scripts/fetch-source.sh openssl)" dist/
+      - if: steps.version.outputs.publish == 'true'
+        run: python3 scripts/make-manifest.py "$GITHUB_REPOSITORY"
+      - name: publish
+        if: steps.version.outputs.publish == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          . ./versions.env
+          gh release create "$TAG" --target "$GITHUB_SHA" --title "MariaDB $MARIADB_VERSION (r$REVISION)" \
             --notes-file <(python3 - <<'EOF'
           import json
           m = json.load(open("dist/manifest.json"))
