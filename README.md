@@ -53,6 +53,7 @@ packages, `SHA256SUMS`, the exact MariaDB source tarball (GPL), and `manifest.js
   "mariadbVersion": "11.8.9",
   "revision": 1,
   "tag": "v11.8.9-r1",
+  "openSslVersion": "3.5.9",
   "assets": [
     { "target": "linux-x64", "os": "linux", "arch": "x64", "libc": "glibc", "minGlibc": "2.28",
       "file": "portable-mariadb-11.8.9-r1-linux-x64.tar.gz", "format": "tar.gz",

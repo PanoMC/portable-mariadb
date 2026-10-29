@@ -78,7 +78,11 @@ def main():
         "mariadbVersion": version,
         "revision": int(revision),
         "tag": tag,
-        "source": f"https://github.com/{repo}/releases/download/{tag}/mariadb-{version}.tar.gz",
+        "openSslVersion": versions["OPENSSL_VERSION"],
+        "sources": [
+            f"https://github.com/{repo}/releases/download/{tag}/mariadb-{version}.tar.gz",
+            f"https://github.com/{repo}/releases/download/{tag}/openssl-{versions['OPENSSL_VERSION']}.tar.gz",
+        ],
         "assets": assets,
     }
     (DIST / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
