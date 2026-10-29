@@ -97,11 +97,12 @@ Copy-Item "$Root/package/README.txt" "$Pkg/README.txt"
 $Dumpbin = Get-ChildItem "${env:ProgramFiles}/Microsoft Visual Studio" -Recurse -Filter dumpbin.exe -ErrorAction SilentlyContinue |
     Where-Object { $_.FullName -match 'Host(x64|arm64)\\(x64|arm64)' } | Select-Object -First 1
 if ($Dumpbin) {
-    $Allowed = '^(kernel32|advapi32|ws2_32|user32|shell32|ole32|oleaut32|shlwapi|secur32|crypt32|bcrypt|ncrypt|version|dbghelp|psapi|iphlpapi|userenv|mswsock|rpcrt4|netapi32|api-ms-win-.*|ntdll|kernelbase|mariadbd)\.(dll|exe)$'
+    $Allowed = '^(kernel32|advapi32|ws2_32|user32|shell32|ole32|oleaut32|shlwapi|secur32|crypt32|bcrypt|ncrypt|version|dbghelp|psapi|iphlpapi|userenv|mswsock|rpcrt4|netapi32|icu|icuuc|icuin|api-ms-win-.*|ntdll|kernelbase|mariadbd)\.(dll|exe)$'
     foreach ($File in Get-ChildItem "$Pkg/bin", "$Pkg/lib/plugin" -Include '*.exe', '*.dll' -Recurse) {
         $Deps = & $Dumpbin.FullName /nologo /dependents $File.FullName | Where-Object { $_ -match '^\s+\S+\.(dll|exe)\s*$' } | ForEach-Object { $_.Trim() }
         foreach ($Dep in $Deps) {
-            # DLLs shipped in the package itself (server.dll) are fine too.
+            # DLLs shipped in the package itself (server.dll) are fine too. icu*.dll is the ICU that ships
+            # with Windows 10 1703+.
             if ($Dep.ToLower() -notmatch $Allowed -and -not (Test-Path "$Pkg/bin/$Dep")) {
                 throw "$($File.Name) imports non-system DLL $Dep"
             }
