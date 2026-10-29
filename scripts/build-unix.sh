@@ -26,6 +26,8 @@ fi
 install_build_deps() {
     if command -v dnf >/dev/null 2>&1; then
         dnf install -y -q bison ncurses-devel perl >/dev/null
+        # Images on the system gcc (manylinux_2_39) need the static libstdc++ separately.
+        dnf install -y -q libstdc++-static >/dev/null 2>&1 || true
     elif command -v yum >/dev/null 2>&1; then
         yum install -y -q bison ncurses-devel perl >/dev/null
     elif command -v apk >/dev/null 2>&1; then
