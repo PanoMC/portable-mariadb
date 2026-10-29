@@ -10,10 +10,7 @@ on:
 permissions:
   contents: read
 
-concurrency:
-  group: build-${{ github.ref }}
-  # Runs are not cancelled: the QEMU targets take hours and would never finish while iterating.
-  cancel-in-progress: false
+# No concurrency group: the QEMU targets take hours, a new push must neither cancel nor wait for them.
 
 jobs:
   linux:

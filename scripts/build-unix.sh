@@ -125,7 +125,6 @@ set -- \
     -DPLUGIN_PROVIDER_LZO=NO \
     -DPLUGIN_PROVIDER_SNAPPY=NO \
     -DPLUGIN_PERFSCHEMA=YES \
-    -DWITH_READLINE=ON \
     -DCMAKE_DISABLE_FIND_PACKAGE_Boost=ON \
     -DCMAKE_DISABLE_FIND_PACKAGE_LibXml2=ON \
     -DCMAKE_DISABLE_FIND_PACKAGE_CURL=ON
@@ -133,21 +132,25 @@ set -- \
 case "$TARGET" in
     linux-*)
         # libstdc++ / libgcc are linked in, everything else non-libc is bundled by bundle-linux-libs.sh.
-        # The static libcrypto needs pthread / dl in every module that pulls it in.
+        # The static libcrypto needs pthread / dl in every module that pulls it in. The client gets the
+        # bundled readline (linked in), so only ncurses is bundled for it.
         set -- "$@" \
             -DCMAKE_EXE_LINKER_FLAGS="-static-libstdc++ -static-libgcc" \
             -DCMAKE_SHARED_LINKER_FLAGS="-static-libstdc++ -static-libgcc" \
             -DCMAKE_MODULE_LINKER_FLAGS="-static-libstdc++ -static-libgcc" \
             -DCMAKE_C_STANDARD_LIBRARIES="-lpthread -ldl" \
             -DCMAKE_CXX_STANDARD_LIBRARIES="-lpthread -ldl" \
+            -DWITH_READLINE=ON \
             -DCMAKE_DISABLE_FIND_PACKAGE_PkgConfig=ON
         ;;
     macos-*)
         # Never pick up Homebrew / MacPorts libraries: only /usr/lib and system frameworks may be linked.
+        # The client uses the system libedit; the bundled readline clashes with its headers.
         set -- "$@" \
             -DCMAKE_OSX_DEPLOYMENT_TARGET="${MACOSX_DEPLOYMENT_TARGET:-11.0}" \
             -DCMAKE_IGNORE_PREFIX_PATH="/opt/homebrew;/usr/local;/opt/local" \
-            -DCMAKE_FIND_FRAMEWORK=LAST
+            -DCMAKE_FIND_FRAMEWORK=LAST \
+            -DWITH_READLINE=OFF
         case "$TARGET" in
             macos-arm64) set -- "$@" -DCMAKE_OSX_ARCHITECTURES=arm64 ;;
             macos-x64) set -- "$@" -DCMAKE_OSX_ARCHITECTURES=x86_64 ;;

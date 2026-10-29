@@ -50,7 +50,8 @@ if ($LASTEXITCODE -ne 0) { throw 'extracting the source failed' }
 
 # Same feature set as build-unix.sh. The CRT is linked statically, so no VC++ redistributable is needed.
 $CmakeArgs = @(
-    '-S', $Src, '-B', $Build, '-G', 'Visual Studio 17 2022', '-A', $Arch,
+    # No -G: CMake picks the newest installed Visual Studio (the ARM64 runner has a newer one than x64).
+    '-S', $Src, '-B', $Build, '-A', $Arch,
     '-DCMAKE_POLICY_VERSION_MINIMUM=3.5',
     '-DWITH_SSL=bundled', '-DWITH_ZLIB=bundled', '-DWITH_PCRE=bundled', '-DWITH_LIBFMT=bundled',
     '-DWITH_WSREP=OFF', '-DWITH_EMBEDDED_SERVER=OFF', '-DWITH_UNIT_TESTS=OFF', '-DCONC_WITH_UNIT_TESTS=OFF',
@@ -82,6 +83,8 @@ $Tools = 'mariadbd', 'mariadb', 'mariadb-admin', 'mariadb-dump', 'mariadb-upgrad
 foreach ($Tool in $Tools) {
     Copy-Item "$Stage/bin/$Tool.exe" "$Pkg/bin/"
 }
+# On Windows the server itself lives in server.dll; mariadbd.exe is a thin launcher.
+Get-ChildItem "$Stage/bin" -Filter '*.dll' | Copy-Item -Destination "$Pkg/bin/"
 Copy-Item -Recurse "$Stage/share" "$Pkg/share"
 $Excluded = Get-Content "$Root/package/excluded-plugins.txt" | Where-Object { $_ }
 Get-ChildItem "$Stage/lib/plugin" -Filter '*.dll' -ErrorAction SilentlyContinue |
@@ -92,13 +95,16 @@ Copy-Item "$Root/package/README.txt" "$Pkg/README.txt"
 
 # Only Windows system DLLs may be imported.
 $Dumpbin = Get-ChildItem "${env:ProgramFiles}/Microsoft Visual Studio" -Recurse -Filter dumpbin.exe -ErrorAction SilentlyContinue |
-    Where-Object { $_.FullName -match 'Hostx64\\x64' } | Select-Object -First 1
+    Where-Object { $_.FullName -match 'Host(x64|arm64)\\(x64|arm64)' } | Select-Object -First 1
 if ($Dumpbin) {
     $Allowed = '^(kernel32|advapi32|ws2_32|user32|shell32|ole32|oleaut32|shlwapi|secur32|crypt32|bcrypt|ncrypt|version|dbghelp|psapi|iphlpapi|userenv|mswsock|rpcrt4|netapi32|api-ms-win-.*|ntdll|kernelbase|mariadbd)\.(dll|exe)$'
     foreach ($File in Get-ChildItem "$Pkg/bin", "$Pkg/lib/plugin" -Include '*.exe', '*.dll' -Recurse) {
         $Deps = & $Dumpbin.FullName /nologo /dependents $File.FullName | Where-Object { $_ -match '^\s+\S+\.(dll|exe)\s*$' } | ForEach-Object { $_.Trim() }
         foreach ($Dep in $Deps) {
-            if ($Dep.ToLower() -notmatch $Allowed) { throw "$($File.Name) imports non-system DLL $Dep" }
+            # DLLs shipped in the package itself (server.dll) are fine too.
+            if ($Dep.ToLower() -notmatch $Allowed -and -not (Test-Path "$Pkg/bin/$Dep")) {
+                throw "$($File.Name) imports non-system DLL $Dep"
+            }
         }
     }
 }
