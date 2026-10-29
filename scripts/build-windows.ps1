@@ -34,7 +34,10 @@ New-Item -ItemType Directory -Force -Path $Cache, $Dist | Out-Null
 if (-not (Test-Path $Tarball) -or (Get-FileHash $Tarball -Algorithm SHA256).Hash -ne $Versions.MARIADB_SHA256) {
     $Url = "https://archive.mariadb.org/mariadb-$Version/source/mariadb-$Version.tar.gz"
     Write-Host "Downloading $Url"
-    Invoke-WebRequest -Uri $Url -OutFile "$Tarball.part" -MaximumRetryCount 5 -RetryIntervalSec 5
+    # curl.exe, not Invoke-WebRequest: the server sends the .tar.gz with a gzip Content-Encoding and
+    # Invoke-WebRequest would hand back the decompressed tar.
+    curl.exe -fsSL --retry 5 --retry-delay 5 -o "$Tarball.part" $Url
+    if ($LASTEXITCODE -ne 0) { throw "downloading $Url failed" }
     Move-Item -Force "$Tarball.part" $Tarball
 }
 if ((Get-FileHash $Tarball -Algorithm SHA256).Hash -ne $Versions.MARIADB_SHA256) {
