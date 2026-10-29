@@ -83,6 +83,8 @@ $Tools = 'mariadbd', 'mariadb', 'mariadb-admin', 'mariadb-dump', 'mariadb-upgrad
 foreach ($Tool in $Tools) {
     Copy-Item "$Stage/bin/$Tool.exe" "$Pkg/bin/"
 }
+# mariadb-install-db.exe still starts the server under its legacy name.
+Copy-Item "$Stage/bin/mysqld.exe" "$Pkg/bin/"
 # On Windows the server itself lives in server.dll; mariadbd.exe is a thin launcher.
 Get-ChildItem "$Stage/bin" -Filter '*.dll' | Copy-Item -Destination "$Pkg/bin/"
 Copy-Item -Recurse "$Stage/share" "$Pkg/share"
