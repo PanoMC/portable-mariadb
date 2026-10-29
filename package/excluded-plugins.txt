@@ -1,0 +1,17 @@
+adt_null
+auth_0x0100
+auth_test_plugin
+qa_auth_client
+qa_auth_interface
+qa_auth_server
+dialog_examples
+example_key_management
+debug_key_management
+func_test
+ha_example
+ha_test_sql_discovery
+libdaemon_example
+mypluglib
+test_sql_service
+test_versioning
+type_test

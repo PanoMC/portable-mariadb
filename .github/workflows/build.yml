@@ -1,0 +1,158 @@
+name: build
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
+
+jobs:
+  linux:
+    name: ${{ matrix.target }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: ${{ matrix.qemu && 350 || 120 }}
+    continue-on-error: ${{ matrix.experimental || false }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { target: linux-x64, runner: ubuntu-24.04 }
+          - { target: linux-arm64, runner: ubuntu-24.04-arm }
+          - { target: linux-x86, runner: ubuntu-24.04 }
+          - { target: linux-armv7, runner: ubuntu-24.04-arm, qemu: true }
+          - { target: linux-musl-x64, runner: ubuntu-24.04 }
+          - { target: linux-musl-arm64, runner: ubuntu-24.04-arm }
+          - { target: linux-musl-x86, runner: ubuntu-24.04 }
+          - { target: linux-musl-armv7, runner: ubuntu-24.04-arm, qemu: true }
+          - { target: linux-ppc64le, runner: ubuntu-24.04, qemu: true, experimental: true }
+          - { target: linux-s390x, runner: ubuntu-24.04, qemu: true, experimental: true }
+          - { target: linux-riscv64, runner: ubuntu-24.04, qemu: true, experimental: true }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/cache@v4
+        with:
+          path: .cache/*.tar.gz
+          key: source-${{ hashFiles('versions.env') }}
+      # armv7 runs natively when the arm64 CPU supports AArch32, QEMU is the fallback.
+      - if: matrix.qemu
+        uses: docker/setup-qemu-action@v3
+      - run: scripts/build-linux.sh ${{ matrix.target }}
+      - run: scripts/test-linux-distros.sh ${{ matrix.target }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.target }}
+          path: dist/portable-mariadb-*
+          if-no-files-found: error
+
+  macos:
+    name: ${{ matrix.target }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { target: macos-arm64, runner: macos-15 }
+          - { target: macos-x64, runner: macos-15-intel }
+    env:
+      MACOSX_DEPLOYMENT_TARGET: '11.0'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/cache@v4
+        with:
+          path: .cache/*.tar.gz
+          key: source-${{ hashFiles('versions.env') }}
+      # Build tools only; check-macos-links.sh fails the build if a Homebrew library gets linked.
+      - run: |
+          brew install bison ninja
+          echo "$(brew --prefix bison)/bin" >> "$GITHUB_PATH"
+      - run: scripts/build-unix.sh ${{ matrix.target }}
+      - name: smoke test
+        run: |
+          . ./versions.env
+          mkdir -p "$RUNNER_TEMP/pkg"
+          tar -xzf dist/portable-mariadb-*-${{ matrix.target }}.tar.gz -C "$RUNNER_TEMP/pkg"
+          scripts/smoke-test.sh "$RUNNER_TEMP/pkg/portable-mariadb-$MARIADB_VERSION-r$REVISION-${{ matrix.target }}"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.target }}
+          path: dist/portable-mariadb-*
+          if-no-files-found: error
+
+  windows:
+    name: ${{ matrix.target }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 150
+    continue-on-error: ${{ matrix.experimental || false }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { target: windows-x64, runner: windows-2022 }
+          - { target: windows-arm64, runner: windows-11-arm }
+          - { target: windows-x86, runner: windows-2022, experimental: true }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/cache@v4
+        with:
+          path: .cache/*.tar.gz
+          key: source-${{ hashFiles('versions.env') }}
+      - run: choco install winflexbison3 -y --no-progress
+      - run: scripts/build-windows.ps1 -Target ${{ matrix.target }}
+        shell: pwsh
+      - name: smoke test
+        shell: pwsh
+        run: |
+          Expand-Archive (Get-Item dist/portable-mariadb-*-${{ matrix.target }}.zip).FullName -DestinationPath "$env:RUNNER_TEMP/pkg"
+          $Pkg = Get-ChildItem "$env:RUNNER_TEMP/pkg" -Directory | Select-Object -First 1
+          scripts/smoke-test.ps1 -Package $Pkg.FullName
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.target }}
+          path: dist/portable-mariadb-*
+          if-no-files-found: error
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [linux, macos, windows]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: check tag
+        run: |
+          . ./versions.env
+          expected="v$MARIADB_VERSION-r$REVISION"
+          [ "$GITHUB_REF_NAME" = "$expected" ] || { echo "tag $GITHUB_REF_NAME != $expected (versions.env)"; exit 1; }
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      # The GPL source the binaries were built from goes into the same release.
+      - run: cp "$(scripts/fetch-source.sh mariadb)" "$(scripts/fetch-source.sh openssl)" dist/
+      - run: python3 scripts/make-manifest.py "$GITHUB_REPOSITORY"
+      - name: publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          . ./versions.env
+          gh release create "$GITHUB_REF_NAME" --title "MariaDB $MARIADB_VERSION (r$REVISION)" \
+            --notes-file <(python3 - <<'EOF'
+          import json
+          m = json.load(open("dist/manifest.json"))
+          print(f"Portable MariaDB {m['mariadbVersion']} server packages, build revision {m['revision']}.\n")
+          print("| Target | Size | SHA-256 |\n|---|---|---|")
+          for a in m["assets"]:
+              print(f"| `{a['target']}` | {a['size'] / 1048576:.1f} MB | `{a['sha256'][:16]}…` |")
+          print("\n`manifest.json` lists every package with its URL and full SHA-256.")
+          EOF
+          ) dist/portable-mariadb-*.tar.gz dist/portable-mariadb-*.zip dist/mariadb-*.tar.gz dist/openssl-*.tar.gz dist/manifest.json dist/SHA256SUMS
