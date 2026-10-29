@@ -15,17 +15,24 @@ Write-Host "== $(Get-Content "$B/VERSION")"
 & "$B/bin/mariadb-install-db.exe" "--datadir=$T/data" "--password=$Password" "--port=$Port"
 if ($LASTEXITCODE -ne 0) { throw 'mariadb-install-db failed' }
 
+# Local connection with a self-signed server certificate: TLS stays on, verification is off.
+$Client = @('--no-defaults', '-uroot', "-p$Password", '-h127.0.0.1', "-P$Port", '--skip-ssl-verify-server-cert')
+
 $Server = Start-Process -FilePath "$B/bin/mariadbd.exe" -PassThru -NoNewWindow `
     -ArgumentList "--defaults-file=$T/data/my.ini", '--bind-address=127.0.0.1', "--log-error=$T/error.log"
 try {
     $Ready = $false
     for ($i = 0; $i -lt 120; $i++) {
-        & "$B/bin/mariadb-admin.exe" --no-defaults -uroot "-p$Password" -h127.0.0.1 "-P$Port" ping 2>$null | Out-Null
+        $Ping = & "$B/bin/mariadb-admin.exe" @Client ping 2>&1
         if ($LASTEXITCODE -eq 0) { $Ready = $true; break }
         if ($Server.HasExited) { break }
         Start-Sleep -Milliseconds 500
     }
-    if (-not $Ready) { Get-Content "$T/error.log" -ErrorAction SilentlyContinue; throw 'server did not start' }
+    if (-not $Ready) {
+        Write-Host "last ping: $Ping"
+        Get-Content "$T/error.log" -ErrorAction SilentlyContinue
+        throw 'server did not start'
+    }
 
     $Query = @"
 SELECT VERSION();
@@ -35,12 +42,12 @@ INSERT INTO smoke.t (name, doc) VALUES ('pano', '{"a": 1}');
 SELECT id, name, JSON_EXTRACT(doc, '$.a'), REGEXP_REPLACE(name, '[a]', '') FROM smoke.t;
 SELECT @@have_ssl, @@version_ssl_library, SHA2('pano', 256);
 "@
-    & "$B/bin/mariadb.exe" --no-defaults -uroot "-p$Password" -h127.0.0.1 "-P$Port" -e $Query
+    & "$B/bin/mariadb.exe" @Client -e $Query
     if ($LASTEXITCODE -ne 0) { throw 'queries failed' }
-    & "$B/bin/mariadb-dump.exe" --no-defaults -uroot "-p$Password" -h127.0.0.1 "-P$Port" smoke | Out-File "$T/dump.sql"
+    & "$B/bin/mariadb-dump.exe" @Client smoke | Out-File "$T/dump.sql"
     if (-not (Select-String -Path "$T/dump.sql" -Pattern 'CREATE TABLE `t`' -Quiet)) { throw 'dump failed' }
 
-    & "$B/bin/mariadb-admin.exe" --no-defaults -uroot "-p$Password" -h127.0.0.1 "-P$Port" shutdown
+    & "$B/bin/mariadb-admin.exe" @Client shutdown
     if (-not $Server.WaitForExit(60000)) { throw 'server did not stop' }
     Write-Host 'PASS'
 } finally {
