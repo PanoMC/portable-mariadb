@@ -7,7 +7,7 @@ $ErrorActionPreference = 'Stop'
 
 $Root = Resolve-Path "$PSScriptRoot/.."
 $Versions = @{}
-Get-Content "$Root/versions.env" | Where-Object { $_ -match '^\s*([A-Z_]+)=(.*)$' } | ForEach-Object {
+Get-Content "$Root/versions.env" | Where-Object { $_ -match '^\s*([A-Z0-9_]+)=(.*)$' } | ForEach-Object {
     $Versions[$Matches[1]] = $Matches[2].Trim()
 }
 $Version = $Versions.MARIADB_VERSION

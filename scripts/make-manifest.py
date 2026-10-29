@@ -20,7 +20,7 @@ DIST = ROOT / "dist"
 def read_versions():
     values = {}
     for line in (ROOT / "versions.env").read_text().splitlines():
-        match = re.match(r"^\s*([A-Z_]+)=(.*)$", line)
+        match = re.match(r"^\s*([A-Z0-9_]+)=(.*)$", line)
         if match:
             values[match.group(1)] = match.group(2).strip()
     return values
