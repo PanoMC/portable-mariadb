@@ -18,6 +18,8 @@ if [ $# -eq 0 ]; then
         linux-musl-x64|linux-musl-arm64|linux-musl-armv7) set -- alpine:3.18 alpine:3.20 alpine:latest ;;
         linux-armv7) set -- debian:11-slim ubuntu:22.04 debian:12-slim ;;
         linux-riscv64) set -- ubuntu:24.04 debian:13-slim ;;
+        # debian:12-slim has no s390x image.
+        linux-s390x) set -- ubuntu:22.04 ubuntu:24.04 ;;
         linux-x86) set -- i386/debian:11-slim i386/debian:13-slim ;;
         linux-musl-x86) set -- i386/alpine:3.18 i386/alpine:latest ;;
         linux-x64) set -- debian:10-slim ubuntu:20.04 ubuntu:24.04 debian:13-slim rockylinux:8 \
